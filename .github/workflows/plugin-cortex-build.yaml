@@ -1,0 +1,46 @@
+---
+name: plugin-cortex-build
+run-name: Build the time series storage plugin for Cortex
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/bluebird/bluebird-builder:0.1.0.b6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add workspace to git safe.directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Compile Cortex plugin
+        run: make compile
+      - name: Persist KAR assemble
+        uses: actions/upload-artifact@v4
+        with:
+          name: kar-cortex-tss
+          path: ./assembly/kar/target/opennms-cortex-tss-plugin.kar
+
+  e2e-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/bluebird/bluebird-builder:0.1.0.b6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add workspace to git safe.directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Run End-to-End tests using Docker
+        run: make tests
+      - name: Publish Test Report
+        if: success() || failure()
+        uses: scacap/action-surefire-report@v1
+      - name: Collect test results and logs
+        if: always()
+        run: |
+          make collect-testresults
+      - name: Persist test result artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: testresults-cortex-tss
+          path: ./assembly/kar/target/artifacts/*-reports
